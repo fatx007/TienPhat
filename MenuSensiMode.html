@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Touch Sensitivity Enhancer - Full Screen</title>
+<style>
+  /* Reset & base */
+  * {
+    box-sizing: border-box;
+  }
+  html, body {
+    height: 100%;
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    color: #fff;
+    user-select: none;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Justify start so controls are on top */
+    justify-content: flex-start;
+    max-width: 350px;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 10px 0;
+    height: 100vh;
+  }
+  h1 {
+    font-weight: 700;
+    margin: 0 0 0.2em;
+    font-size: 1.5rem;
+    text-align: center;
+  }
+  p.subtitle {
+    font-weight: 300;
+    margin: 0 0 1em;
+    font-size: 1rem;
+    text-align: center;
+  }
+  .control-group {
+    width: 90%;
+    margin-bottom: 1em;
+  }
+  label {
+    display: block;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.3em;
+    text-align: center;
+  }
+  input[type="range"] {
+    width: 100%;
+  }
+
+  /* Controls container at top */
+  #controls {
+    width: 100%;
+    max-width: 350px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+  }
+
+  /* Touch info on screen */
+  #touchInfo {
+    position: fixed;
+    bottom: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.1rem;
+    font-weight: 600;
+    background: rgba(0,0,0,0.4);
+    padding: 8px 14px;
+    border-radius: 20px;
+    pointer-events: none;
+    user-select: none;
+    min-width: 200px;
+    text-align: center;
+    z-index: 1001;
+  }
+
+  /* Feedback circle for touch */
+  #feedbackCircle {
+    position: fixed;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.7);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.3s ease;
+    opacity: 0;
+    z-index: 1000;
+  }
+
+  #footer {
+    font-size: 0.8rem;
+    font-weight: 300;
+    margin-top: auto;
+    opacity: 0.8;
+    text-align: center;
+    padding: 0 10px 10px 10px;
+    width: 90%;
+    max-width: 350px;
+    user-select: none;
+  }
+
+  @media (max-width: 360px) {
+    #controls {
+      width: 90vw;
+    }
+    #footer {
+      width: 90vw;
+    }
+  }
+</style>
+</head>
+<body>
+  <div id="controls" role="region" aria-label="Touch sensitivity controls">
+    <h1>Menu SensiMode Enhanced Touch</h1>
+    <p class="subtitle">Developed By Fatx007 - Zalo: 0937161512</p>
+    <div class="control-group">
+      <label for="sensitivityRange">Sensitive Screen: <span id="sensitivityValue">41</span> px</label>
+      <input type="range" min="1" max="50" value="10" id="sensitivityRange" step="1" />
+    </div>
+    <div class="control-group">
+      <label for="delayRange">Delay: <span id="delayValue">400</span> ms</label>
+      <input type="range" min="0" max="500" value="100" id="delayRange" step="10" />
+    </div>
+  </div>
+  <div id="touchInfo">Touch anywhere on the screen</div>
+  <div id="feedbackCircle" style="width: 0; height: 0;"></div>
+  <div id="footer">Designed for mobile screens - full screen touch sensitivity - max 600px height &amp; 350px width</div>
+
+<script>
+  (function(){
+    const sensitivityRange = document.getElementById('sensitivityRange');
+    const sensitivityValue = document.getElementById('sensitivityValue');
+    const delayRange = document.getElementById('delayRange');
+    const delayValue = document.getElementById('delayValue');
+    const touchInfo = document.getElementById('touchInfo');
+    const feedbackCircle = document.getElementById('feedbackCircle');
+
+    // Slider values:
+    // slider 1 (left) -> sensitivityThreshold = 50 (less sensitive)
+    // slider 50 (right) -> sensitivityThreshold = 1 (more sensitive)
+    const minThreshold = 1;
+    const maxThreshold = 50;
+
+    // Delay slider values inverted:
+    // slider 0 (left) => delay 500 ms (max)
+    // slider 500 (right) => delay 0 ms (min)
+    const maxDelay = 500;
+
+    // initial values
+    let sliderValue = Number(sensitivityRange.value); // 10
+    // Convert slider to sensitivityThreshold:
+    // sensitivityThreshold = maxThreshold + minThreshold - sliderValue;
+    // So slider=10 => threshold=50+1-10=41
+    let sensitivityThreshold = maxThreshold + minThreshold - sliderValue;
+
+    // start delay slider value and internal delay value inverted
+    let delaySliderValue = Number(delayRange.value);
+    let delay = maxDelay - delaySliderValue;
+
+    let lastUpdateTime = 0;
+
+    let startX = null;
+    let startY = null;
+    let isTouching = false;
+
+    function sliderToThreshold(val) {
+      return maxThreshold + minThreshold - val;
+    }
+    function thresholdToSlider(thresh) {
+      return maxThreshold + minThreshold - thresh;
+    }
+    function sliderToDelay(val) {
+      return maxDelay - val;
+    }
+    function delayToSlider(val) {
+      return maxDelay - val;
+    }
+
+    function updateSensitivityDisplay() {
+      sensitivityValue.textContent = sensitivityThreshold;
+    }
+    function updateDelayDisplay() {
+      delayValue.textContent = delay;
+    }
+
+    // Update slider UI and threshold from slider value changed by user
+    function updateFromSlider(val){
+      sliderValue = val;
+      sensitivityThreshold = sliderToThreshold(val);
+      updateSensitivityDisplay();
+      sensitivityRange.value = sliderValue;
+    }
+
+    // Update delay slider UI and delay from slider changed by user
+    function updateDelayFromSlider(val){
+      delaySliderValue = val;
+      delay = sliderToDelay(val);
+      updateDelayDisplay();
+      delayRange.value = delaySliderValue;
+    }
+
+    // Update slider and threshold when set programmatically
+    function updateSliderAndThreshold(newThreshold){
+      sensitivityThreshold = newThreshold;
+      sliderValue = thresholdToSlider(newThreshold);
+      sensitivityRange.value = sliderValue;
+      updateSensitivityDisplay();
+    }
+
+    // Update delay slider and delay when set programmatically
+    function updateSliderAndDelay(newDelay){
+      delay = newDelay;
+      delaySliderValue = delayToSlider(newDelay);
+      delayRange.value = delaySliderValue;
+      updateDelayDisplay();
+    }
+
+    sensitivityRange.addEventListener('input', (e) => {
+      updateFromSlider(Number(e.target.value));
+    });
+
+    delayRange.addEventListener('input', (e) => {
+      updateDelayFromSlider(Number(e.target.value));
+    });
+
+    function showFeedback(x, y) {
+      feedbackCircle.style.width = '40px';
+      feedbackCircle.style.height = '40px';
+      feedbackCircle.style.left = x + 'px';
+      feedbackCircle.style.top = y + 'px';
+      feedbackCircle.style.opacity = '0.7';
+      // fade out after a short while
+      clearTimeout(feedbackCircle.fadeTimeout);
+      feedbackCircle.fadeTimeout = setTimeout(() => {
+        feedbackCircle.style.opacity = '0';
+      }, 300);
+    }
+
+    function handleTouchStart(e) {
+      if(e.touches.length === 1){
+        const touch = e.touches[0];
+        startX = touch.clientX;
+        startY = touch.clientY;
+        isTouching = true;
+        touchInfo.textContent = 'Touch started';
+        showFeedback(startX, startY);
+        lastUpdateTime = Date.now();
+      }
+    }
+
+    function handleTouchMove(e) {
+      if(!isTouching) return;
+      if(e.touches.length === 1){
+        const now = Date.now();
+        if(now - lastUpdateTime < delay){
+          // Too soon, skip update to enforce delay
+          return;
+        }
+        lastUpdateTime = now;
+        const touch = e.touches[0];
+        const dx = touch.clientX - startX;
+        const dy = touch.clientY - startY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+
+        if(dist >= sensitivityThreshold){
+          let direction = '';
+          if(Math.abs(dx) > Math.abs(dy)){
+            direction = dx > 0 ? 'Swipe Right' : 'Swipe Left';
+            // If swipe right detected, set sensitivity to minimum threshold (1)
+            if(dx > 0){
+              updateSliderAndThreshold(minThreshold);
+            }
+          } else {
+            direction = dy > 0 ? 'Swipe Down' : 'Swipe Up';
+          }
+          touchInfo.textContent = direction + ' (distance: ' + dist.toFixed(1) + 'px)';
+          showFeedback(touch.clientX, touch.clientY);
+        } else {
+          touchInfo.textContent = 'Swipe less than threshold (' + dist.toFixed(1) + 'px)';
+        }
+      }
+    }
+
+    function handleTouchEnd(e) {
+      isTouching = false;
+      touchInfo.textContent = 'Touch ended';
+    }
+
+    // Attach touch handlers to whole document to cover the entire screen
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchmove', handleTouchMove, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd);
+    document.addEventListener('touchcancel', handleTouchEnd);
+
+    // Initialize display with inversion applied
+    updateFromSlider(sliderValue);
+    updateDelayFromSlider(delaySliderValue);
+
+  })();
+</script>
+</body>
+</html>
+
